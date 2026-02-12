@@ -15,3 +15,4 @@ C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\refint\Tripp
 C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.pdb
 C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.genruntimeconfig.cache
 C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\ref\Tripper.Infra.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.sourcelink.json

@@ -136,3 +136,4 @@ C:\Users\patri\source\repos\Tripper\Tripper.API\bin\Debug\net10.0\Swashbuckle.As
 C:\Users\patri\source\repos\Tripper\Tripper.API\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Users\patri\source\repos\Tripper\Tripper.API\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerUI.dll
 C:\Users\patri\source\repos\Tripper\Tripper.API\bin\Debug\net10.0\System.IdentityModel.Tokens.Jwt.dll
+C:\Users\patri\source\repos\Tripper\Tripper.API\obj\Debug\net10.0\Tripper.API.sourcelink.json

@@ -90,7 +90,7 @@ public static class VotingEndpoints
             var key = $"{request.CityName.ToLower()}|{request.Country.ToLower()}";
             
             var existing = await db.Candidates
-                .AnyAsync(c => c.VotingSessionId == votingId && c.CityName.ToLower() == request.CityName.ToLower() && c.Country.ToLower() == request.Country.ToLower());
+                .AnyAsync(c => c.VotingSessionId == votingId && c.CityName.Equals(request.CityName, StringComparison.CurrentCultureIgnoreCase) && c.Country.Equals(request.Country, StringComparison.CurrentCultureIgnoreCase));
                 // Simplified duplicate check for MVP
             
             if (existing) return Results.Conflict("Candidate already exists.");
@@ -182,7 +182,7 @@ public static class VotingEndpoints
                 .ToList();
             
             Candidate? winner = null;
-            if (voteCounts.Any())
+            if (voteCounts.Count != 0)
             {
                 var maxVotes = voteCounts.First().Count;
                 var topCandidates = voteCounts.Where(x => x.Count == maxVotes).Select(x => x.CandidateId).ToList();

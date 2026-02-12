@@ -13,12 +13,12 @@ public class Item
     public User PaidByUser { get; set; } = null!;
 
     public decimal Amount { get; set; }
-    public string Currency { get; set; } = "USD";
+    public string Currency { get; set; } = "CHF";
     [Required]
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // Simplified for MVP: List of User IDs who are involved in this expense
-    public List<Guid> PayeeUserIds { get; set; } = new List<Guid>();
+    public List<Guid> PayeeUserIds { get; set; } = [];
 }

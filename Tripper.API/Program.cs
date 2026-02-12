@@ -10,7 +10,6 @@ using Tripper.Infra.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
@@ -55,6 +54,15 @@ builder.Services.AddDbContext<TripperDbContext>(options =>
 
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<TripperDbContext>();
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
+    await TripperDbSeeder.SeedAsync(db, hasher);
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -64,11 +72,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-
-// builder.Services.AddOpenApi();
-
 app.UseCors("AllowAngular");
-// app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -79,5 +83,3 @@ app.MapItemEndpoints();
 app.MapVotingEndpoints();
 
 app.Run();
-
-public partial class Program { }

@@ -9,3 +9,4 @@ C:\Users\patri\source\repos\Tripper\Tripper.Core\obj\Debug\net10.0\Tripper.Core.
 C:\Users\patri\source\repos\Tripper\Tripper.Core\obj\Debug\net10.0\refint\Tripper.Core.dll
 C:\Users\patri\source\repos\Tripper\Tripper.Core\obj\Debug\net10.0\Tripper.Core.pdb
 C:\Users\patri\source\repos\Tripper\Tripper.Core\obj\Debug\net10.0\ref\Tripper.Core.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Core\obj\Debug\net10.0\Tripper.Core.sourcelink.json

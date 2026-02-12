@@ -38,7 +38,7 @@ public static class ItemEndpoints
             };
             
             // If payees list is empty, maybe default to all members? MVP requirement: "Payees (list of MemberIds)"
-            if (newItem.PayeeUserIds == null || newItem.PayeeUserIds.Count == 0)
+            if (newItem.PayeeUserIds.Count == 0)
             {
                  // Fetch all group members
                  newItem.PayeeUserIds = await db.GroupMembers
@@ -104,7 +104,7 @@ public static class ItemEndpoints
                     balances[item.PaidByMemberId] = item.Amount; // In case payer left group?
 
                  // Subtract split amount from payees
-                 if (item.PayeeUserIds != null && item.PayeeUserIds.Any())
+                 if (item.PayeeUserIds.Count != 0)
                  {
                      var splitCount = item.PayeeUserIds.Count;
                      var splitAmount = item.Amount / splitCount;
@@ -137,8 +137,7 @@ public static class ItemEndpoints
             if (member == null) return Results.Forbid();
 
             var item = await db.Items.FindAsync(itemId);
-            if (item == null) return Results.NotFound();
-            if (item.GroupId != groupId) return Results.NotFound();
+            if (item == null || item.GroupId != groupId) return Results.NotFound();
 
             // Permissions: Admin or Owner
             if (member.Role != GroupRole.Admin && item.PaidByMemberId != userId)
