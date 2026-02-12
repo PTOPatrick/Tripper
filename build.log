@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Tripper.Core -> C:\Users\patri\source\repos\Tripper\Tripper.Core\bin\Debug\net10.0\Tripper.Core.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\Auth\JwtTokenService.cs(1,14): error CS0234: The type or namespace name 'IdentityModel' does not exist in the namespace 'System' (are you missing an assembly reference?) [C:\Users\patri\source\repos\Tripper\Tripper.Infra\Tripper.Infra.csproj]
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\Auth\JwtTokenService.cs(5,17): error CS0234: The type or namespace name 'IdentityModel' does not exist in the namespace 'Microsoft' (are you missing an assembly reference?) [C:\Users\patri\source\repos\Tripper\Tripper.Infra\Tripper.Infra.csproj]
+
+Build FAILED.
+
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\Auth\JwtTokenService.cs(1,14): error CS0234: The type or namespace name 'IdentityModel' does not exist in the namespace 'System' (are you missing an assembly reference?) [C:\Users\patri\source\repos\Tripper\Tripper.Infra\Tripper.Infra.csproj]
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\Auth\JwtTokenService.cs(5,17): error CS0234: The type or namespace name 'IdentityModel' does not exist in the namespace 'Microsoft' (are you missing an assembly reference?) [C:\Users\patri\source\repos\Tripper\Tripper.Infra\Tripper.Infra.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:01.57

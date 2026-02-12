@@ -1,0 +1,25 @@
+npm error code ERESOLVE
+npm error ERESOLVE unable to resolve dependency tree
+npm error
+npm error While resolving: tripper-ui@0.0.0
+npm error Found: zone.js@0.13.3
+npm error node_modules/zone.js
+npm error   zone.js@"~0.13.0" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer zone.js@"~0.15.0" from @angular/core@19.2.18
+npm error node_modules/@angular/core
+npm error   @angular/core@"^19.2.18" from the root project
+npm error   peer @angular/core@"19.2.18" from @angular/animations@19.2.18
+npm error   node_modules/@angular/animations
+npm error     @angular/animations@"^19.2.18" from the root project
+npm error   1 more (@angular/common)
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error C:\Users\patri\AppData\Local\npm-cache\_logs\2026-02-10T18_30_36_095Z-eresolve-report.txt
+npm error A complete log of this run can be found in: C:\Users\patri\AppData\Local\npm-cache\_logs\2026-02-10T18_30_36_095Z-debug-0.log

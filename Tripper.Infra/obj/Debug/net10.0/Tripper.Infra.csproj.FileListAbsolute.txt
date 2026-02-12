@@ -1,0 +1,17 @@
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\bin\Debug\net10.0\Tripper.Infra.deps.json
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\bin\Debug\net10.0\Tripper.Infra.runtimeconfig.json
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\bin\Debug\net10.0\Tripper.Infra.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\bin\Debug\net10.0\Tripper.Infra.pdb
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\bin\Debug\net10.0\Tripper.Core.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\bin\Debug\net10.0\Tripper.Core.pdb
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.csproj.AssemblyReference.cache
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.AssemblyInfoInputs.cache
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.AssemblyInfo.cs
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.csproj.CoreCompileInputs.cache
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper..6B2BB060.Up2Date
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\refint\Tripper.Infra.dll
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.pdb
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\Tripper.Infra.genruntimeconfig.cache
+C:\Users\patri\source\repos\Tripper\Tripper.Infra\obj\Debug\net10.0\ref\Tripper.Infra.dll
