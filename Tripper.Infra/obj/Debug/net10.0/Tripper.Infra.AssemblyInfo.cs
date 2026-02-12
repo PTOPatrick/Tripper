@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Tripper.Infra")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8f30747c7e8d122921ee5681b784039c89b36c7b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8d75f39097725ef76968ffeadcaf42222c484907")]
 [assembly: System.Reflection.AssemblyProductAttribute("Tripper.Infra")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Tripper.Infra")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -87,7 +87,7 @@ public static class VotingEndpoints
 
             // Normalized key to prevent duplicates in same session?
             // "NormalizedKey unique per session"
-            var key = $"{request.CityName.ToLower()}|{request.Country.ToLower()}";
+            // var key = $"{request.CityName.ToLower()}|{request.Country.ToLower()}"; TODO: Wozu wurde diese Variabel benötigt?
             
             var existing = await db.Candidates
                 .AnyAsync(c => c.VotingSessionId == votingId && c.CityName.Equals(request.CityName, StringComparison.CurrentCultureIgnoreCase) && c.Country.Equals(request.Country, StringComparison.CurrentCultureIgnoreCase));

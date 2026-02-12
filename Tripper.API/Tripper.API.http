@@ -1,6 +1,0 @@
-@Tripper.API_HostAddress = http://localhost:5208
-
-GET {{Tripper.API_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
