@@ -1,0 +1,82 @@
+############################################################
+# GENERAL
+############################################################
+
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+
+############################################################
+# IDEs
+############################################################
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
+
+############################################################
+# BACKEND - ASP.NET Core
+############################################################
+
+# Build output
+backend/**/bin/
+backend/**/obj/
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+
+# User-specific files
+backend/**/*.user
+backend/**/*.suo
+
+# Publish output
+backend/**/publish/
+backend/**/wwwroot/
+
+# EF Core
+backend/**/Migrations/*Designer.cs
+backend/**/Migrations/*.Snapshot.cs
+
+# Secrets
+backend/**/appsettings.Development.json
+backend/**/appsettings.Local.json
+backend/**/secrets.json
+
+# Logs
+backend/**/*.log
+
+############################################################
+# FRONTEND - Angular
+############################################################
+
+# Node
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Angular build
+frontend/dist/
+frontend/.angular/
+frontend/.cache/
+
+# Environment files (optional)
+frontend/src/environments/environment.local.ts
+frontend/src/environments/environment.development.local.ts
+
+############################################################
+# OS / TEMP
+############################################################
+
+*.swp
+*.lock.json
+*.pid
