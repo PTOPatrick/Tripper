@@ -1,4 +1,4 @@
-namespace Tripper.Core.DTOs;
+namespace Tripper.Application.DTOs;
 
 public record SignupRequest(string Username, string Email, string Password);
 public record LoginRequest(string Email, string Password);

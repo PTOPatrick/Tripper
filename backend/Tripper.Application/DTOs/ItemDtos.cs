@@ -1,4 +1,4 @@
-namespace Tripper.Core.DTOs;
+namespace Tripper.Application.DTOs;
 
 public record CreateItemRequest(string Title, decimal Amount, string Currency, string Description, Guid? PaidByMemberId, List<Guid> PayeeUserIds);
 public record UpdateItemRequest(string Title, decimal Amount, string Currency, string Description, List<Guid> PayeeUserIds);

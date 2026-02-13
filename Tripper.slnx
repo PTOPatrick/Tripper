@@ -2,4 +2,5 @@
   <Project Path="backend/Tripper.API/Tripper.API.csproj" />
   <Project Path="backend/Tripper.Core/Tripper.Core.csproj" />
   <Project Path="backend/Tripper.Infra/Tripper.Infra.csproj" />
+  <Project Path="backend/Tripper.Application/Tripper.Application.csproj" />
 </Solution>

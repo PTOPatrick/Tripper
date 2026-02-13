@@ -1,9 +1,6 @@
-using Microsoft.EntityFrameworkCore;
-using Tripper.Core.DTOs;
-using Tripper.Core.Entities;
-using Tripper.Core.Interfaces;
-using Tripper.Infra.Auth;
-using Tripper.Infra.Data;
+using Tripper.API.Common;
+using Tripper.Application.DTOs;
+using Tripper.Application.Interfaces;
 
 namespace Tripper.API.Endpoints;
 
@@ -13,43 +10,16 @@ public static class AuthEndpoints
     {
         var group = app.MapGroup("/auth").WithTags("Auth");
 
-        group.MapPost("/signup", async (SignupRequest request, TripperDbContext db, IPasswordHasher hasher, JwtTokenService jwt) =>
+        group.MapPost("/signup", async (SignupRequest request, IAuthService auth, CancellationToken ct) =>
         {
-            if (await db.Users.AnyAsync(u => u.Email == request.Email))
-            {
-                return Results.Conflict("Email already exists");
-            }
-            
-            if (await db.Users.AnyAsync(u => u.Username == request.Username))
-            {
-                return Results.Conflict("Username already exists");
-            }
-
-            var user = new User
-            {
-                Id = Guid.NewGuid(),
-                Username = request.Username,
-                Email = request.Email,
-                PasswordHash = hasher.HashPassword(request.Password)
-            };
-
-            db.Users.Add(user);
-            await db.SaveChangesAsync();
-
-            var token = jwt.GenerateToken(user);
-            return Results.Ok(new AuthResponse(token, user.Id, user.Username));
+            var result = await auth.SignupAsync(request, ct);
+            return result.ToHttpResult();
         });
 
-        group.MapPost("/login", async (LoginRequest request, TripperDbContext db, IPasswordHasher hasher, JwtTokenService jwt) =>
+        group.MapPost("/login", async (LoginRequest request, IAuthService auth, CancellationToken ct) =>
         {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-            if (user == null || !hasher.VerifyPassword(request.Password, user.PasswordHash))
-            {
-                return Results.Unauthorized();
-            }
-
-            var token = jwt.GenerateToken(user);
-            return Results.Ok(new AuthResponse(token, user.Id, user.Username));
+            var result = await auth.LoginAsync(request, ct);
+            return result.ToHttpResult();
         });
     }
 }

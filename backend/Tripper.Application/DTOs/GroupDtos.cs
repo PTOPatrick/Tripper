@@ -1,6 +1,6 @@
 using Tripper.Core.Entities;
 
-namespace Tripper.Core.DTOs;
+namespace Tripper.Application.DTOs;
 
 public record CreateGroupRequest(string Name, string Description, string? DestinationCityName, string? DestinationCountry);
 public record UpdateGroupRequest(string Name, string Description, string? DestinationCityName, string? DestinationCountry);

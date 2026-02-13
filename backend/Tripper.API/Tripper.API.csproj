@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Tripper.Core\Tripper.Core.csproj" />
     <ProjectReference Include="..\Tripper.Infra\Tripper.Infra.csproj" />
+    <ProjectReference Include="..\Tripper.Application\Tripper.Application.csproj" />
   </ItemGroup>
 
 </Project>

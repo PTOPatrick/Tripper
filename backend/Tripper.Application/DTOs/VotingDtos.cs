@@ -1,6 +1,6 @@
 using Tripper.Core.Entities;
 
-namespace Tripper.Core.DTOs;
+namespace Tripper.Application.DTOs;
 
 public record CreateVotingRequest(int MaxVotesPerMember = 3);
 public record AddCandidateRequest(string CityName, string Country);
