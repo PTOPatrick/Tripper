@@ -1,6 +1,7 @@
 using Tripper.API.Common;
 using Tripper.Application.DTOs;
 using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Services;
 
 namespace Tripper.API.Endpoints;
 

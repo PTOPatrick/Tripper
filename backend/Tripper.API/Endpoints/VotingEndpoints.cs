@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Tripper.API.Common;
 using Tripper.Application.DTOs;
 using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Services;
 
 namespace Tripper.API.Endpoints;
 
@@ -25,10 +26,13 @@ public static class VotingEndpoints
             var result = await votingService.GetActiveAsync(groupId, userId, ct);
 
             // Special-case: Ok(null) => NoContent (matches your old behavior)
-            if (result.IsSuccess && result.Value is null)
-                return Results.NoContent();
-
-            return result.ToHttpResult();
+            return result is { IsSuccess: true, Value: null } ? Results.NoContent() : result.ToHttpResult();
+        });
+        
+        group.MapDelete("/{votingId:guid}/votes/{candidateId:guid}", async (Guid groupId, Guid votingId, Guid candidateId, IVotingService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            return (await svc.RemoveVoteAsync(groupId, votingId, userId, candidateId, ct)).ToHttpResult();
         });
 
         group.MapPost("/{votingId:guid}/candidates", async (Guid groupId, Guid votingId, AddCandidateRequest request, IVotingService votingService, ClaimsPrincipal user, CancellationToken ct) =>

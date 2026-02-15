@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Tripper.API.Common;              // ToHttpResult()
 using Tripper.Application.DTOs;
 using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Services;
+using Tripper.Application.Services;
 
 namespace Tripper.API.Endpoints;
 
@@ -41,6 +43,13 @@ public static class ItemEndpoints
             var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var result = await itemService.DeleteAsync(groupId, itemId, userId, ct);
             return result.ToHttpResult();
+        });
+
+        app.MapPost("/groups/{groupId:guid}/settlement/recalculate", async (Guid groupId, ClaimsPrincipal user, ISettlementService service, CancellationToken ct) =>
+        {
+            var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var snapshot = await service.RecalculateAsync(groupId, userId, ct);
+            return Results.Ok(snapshot);
         });
     }
 }

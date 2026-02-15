@@ -3,18 +3,15 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Services;
 using Tripper.Core.Entities;
 
 namespace Tripper.Infra.Auth;
 
-public class JwtTokenService
+public class JwtTokenService(IOptions<JwtSettings> jwtSettings) : IJwtTokenService
 {
-    private readonly JwtSettings _jwtSettings;
-
-    public JwtTokenService(IOptions<JwtSettings> jwtSettings)
-    {
-        _jwtSettings = jwtSettings.Value;
-    }
+    private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
     public string GenerateToken(User user)
     {
@@ -23,9 +20,9 @@ public class JwtTokenService
         
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Email, user.Email)
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Email, user.Email)
         };
 
         var tokenDescriptor = new SecurityTokenDescriptor

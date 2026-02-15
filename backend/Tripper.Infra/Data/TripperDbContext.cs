@@ -12,16 +12,20 @@ public class TripperDbContext(DbContextOptions<TripperDbContext> options) : DbCo
     public DbSet<VotingSession> VotingSessions { get; set; }
     public DbSet<Candidate> Candidates { get; set; }
     public DbSet<Vote> Votes { get; set; }
+    public DbSet<Core.Entities.Currency> Currencies { get; set; }
+
+    public DbSet<SettlementSnapshot> SettlementSnapshots { get; set; }
+    public DbSet<SettlementTransfer> SettlementTransfers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // User - Email unique
+        // User - Email/Username unique
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
-            
+
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Username)
             .IsUnique();
@@ -45,14 +49,12 @@ public class TripperDbContext(DbContextOptions<TripperDbContext> options) : DbCo
             .HasOne(i => i.Group)
             .WithMany(g => g.Items)
             .HasForeignKey(i => i.GroupId);
-            
+
         modelBuilder.Entity<Item>()
             .HasOne(i => i.PaidByUser)
             .WithMany()
             .HasForeignKey(i => i.PaidByMemberId)
-            .OnDelete(DeleteBehavior.Restrict); 
-            // Restrict delete of user if they paid for items? Or Cascade? 
-            // Usually keep financial records, so Restrict or SetNull. Let's start with Restrict.
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Voting
         modelBuilder.Entity<VotingSession>()
@@ -68,14 +70,65 @@ public class TripperDbContext(DbContextOptions<TripperDbContext> options) : DbCo
         modelBuilder.Entity<Vote>()
             .HasOne<VotingSession>()
             .WithMany(vs => vs.Votes)
-            .HasForeignKey(v => v.VotingSessionId); // Optimization/denormalization for easier queries
-            
+            .HasForeignKey(v => v.VotingSessionId);
+
         modelBuilder.Entity<Vote>()
             .HasOne<Candidate>()
             .WithMany()
             .HasForeignKey(v => v.CandidateId)
-            .OnDelete(DeleteBehavior.Restrict); // Don't delete vote if candidate is deleted? Or Cascade?
-            // Actually Cascade is fine for MVP.
-            
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Currency
+        modelBuilder.Entity<Core.Entities.Currency>(entity =>
+        {
+            entity.ToTable("Currencies");
+            entity.HasKey(c => c.Code);
+
+            entity.Property(c => c.Code)
+                .HasMaxLength(3)
+                .IsRequired();
+        });
+
+        // SettlementSnapshot
+        modelBuilder.Entity<SettlementSnapshot>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.GroupId).IsRequired();
+            b.Property(x => x.CreatedAt).IsRequired();
+            b.Property(x => x.CreatedByUserId).IsRequired();
+
+            b.Property(x => x.BaseCurrency)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            // Explicit FK to Group
+            b.HasOne<Group>()
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasMany(x => x.Transfers)
+                .WithOne(x => x.SettlementSnapshot)
+                .HasForeignKey(x => x.SettlementSnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasIndex(x => new { x.GroupId, x.CreatedAt });
+        });
+
+        // SettlementTransfer
+        modelBuilder.Entity<SettlementTransfer>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.SettlementSnapshotId).IsRequired();
+            b.Property(x => x.FromUserId).IsRequired();
+            b.Property(x => x.ToUserId).IsRequired();
+
+            b.Property(x => x.Amount)
+                .HasPrecision(18, 2);
+
+            b.HasIndex(x => x.SettlementSnapshotId);
+        });
     }
 }

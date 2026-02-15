@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Tripper.Application.Interfaces.Services;
 using Tripper.Core.Interfaces;
 using Tripper.Infra.Auth;
 using Tripper.Infra.Services;
@@ -10,10 +12,14 @@ public static class DependencyInjection
 {
     extension(IServiceCollection services)
     {
-        public IServiceCollection AddApi(byte[] key, IConfigurationSection jwtConfiguration, JwtSettings jwtSettings)
+        public IServiceCollection AddApi(IConfiguration configuration)
         {
+            var jwtConfiguration = configuration.GetSection("JwtSettings");
+            var jwtSettings = jwtConfiguration.Get<JwtSettings>();
+            var key = Encoding.ASCII.GetBytes(jwtSettings!.Secret);
+            
             services.Configure<JwtSettings>(jwtConfiguration);
-            services.AddScoped<JwtTokenService>();
+            services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddOpenApi();
             services.AddSecurity(key, jwtSettings);

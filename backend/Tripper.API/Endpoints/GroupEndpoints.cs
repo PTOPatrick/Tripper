@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Tripper.API.Common;
 using Tripper.Application.DTOs;
 using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Services;
 using Tripper.Application.Services;
 
 namespace Tripper.API.Endpoints;

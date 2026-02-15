@@ -1,28 +1,23 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Tripper.Application.Common;
+﻿using Tripper.Application.Common;
 using Tripper.Application.DTOs;
 using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Persistence;
+using Tripper.Application.Interfaces.Services;
 using Tripper.Core.Entities;
-using Tripper.Infra.Data;
 
 namespace Tripper.Application.Services;
 
-public sealed class VotingService(TripperDbContext db) : IVotingService
+public sealed class VotingService(IVotingRepository repo) : IVotingService
 {
     public async Task<Result<VotingSessionResponse>> StartAsync(Guid groupId, Guid currentUserId, CreateVotingRequest request, CancellationToken ct = default)
     {
-        // Auth: Member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result<VotingSessionResponse>.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
         if (request.MaxVotesPerMember <= 0)
             return Result<VotingSessionResponse>.Fail(new Error(ErrorType.Validation, "voting.maxvotes.invalid", "MaxVotesPerMember must be > 0."));
 
-        var hasActive = await db.VotingSessions
-            .AnyAsync(vs => vs.GroupId == groupId && vs.Status == VotingStatus.Open, ct);
-
-        if (hasActive)
+        if (await repo.HasActiveSessionAsync(groupId, ct))
             return Result<VotingSessionResponse>.Fail(new Error(ErrorType.Conflict, "voting.active_exists", "An active voting session already exists."));
 
         var session = new VotingSession
@@ -34,8 +29,8 @@ public sealed class VotingService(TripperDbContext db) : IVotingService
             CreatedAt = DateTime.UtcNow
         };
 
-        db.VotingSessions.Add(session);
-        await db.SaveChangesAsync(ct);
+        repo.AddSession(session);
+        await repo.SaveChangesAsync(ct);
 
         return Result<VotingSessionResponse>.Ok(new VotingSessionResponse(
             session.Id, session.GroupId, session.Status, session.MaxVotesPerMember, session.CreatedAt, null, new List<CandidateDto>()));
@@ -43,62 +38,61 @@ public sealed class VotingService(TripperDbContext db) : IVotingService
 
     public async Task<Result<VotingSessionResponse?>> GetActiveAsync(Guid groupId, Guid currentUserId, CancellationToken ct = default)
     {
-        // Auth: Member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result<VotingSessionResponse?>.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
-        var session = await db.VotingSessions
-            .AsNoTracking()
-            .Include(vs => vs.Candidates)
-                .ThenInclude(c => c.CreatedByUser)
-            .Include(vs => vs.Votes)
-            .FirstOrDefaultAsync(vs => vs.GroupId == groupId && vs.Status == VotingStatus.Open, ct);
-
-        if (session is null)
-            return Result<VotingSessionResponse?>.Ok(null); // mapped to NoContent in endpoint
-
-        var response = new VotingSessionResponse(
-            session.Id, session.GroupId, session.Status, session.MaxVotesPerMember, session.CreatedAt, session.ClosedAt,
-            session.Candidates.Select(c => new CandidateDto(
-                c.Id, c.CityName, c.Country, c.CreatedByUserId, c.CreatedByUser.Username,
-                session.Votes.Count(v => v.CandidateId == c.Id)
-            )).ToList()
-        );
-
-        return Result<VotingSessionResponse?>.Ok(response);
+        var response = await repo.GetActiveSessionResponseAsync(groupId, currentUserId, ct);
+        return Result<VotingSessionResponse?>.Ok(response); // null => NoContent im Endpoint
     }
 
-    public async Task<Result> AddCandidateAsync(Guid groupId, Guid votingId, Guid currentUserId, AddCandidateRequest request, CancellationToken ct = default)
+    public async Task<Result> RemoveVoteAsync(Guid groupId, Guid votingId, Guid currentUserId, Guid candidateId, CancellationToken ct = default)
     {
-        // Auth: Member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
-        if (string.IsNullOrWhiteSpace(request.CityName) || string.IsNullOrWhiteSpace(request.Country))
-            return Result.Fail(new Error(ErrorType.Validation, "candidate.invalid_input", "CityName and Country are required."));
-
-        var session = await db.VotingSessions.FirstOrDefaultAsync(vs => vs.Id == votingId, ct);
+        var session = await repo.FindSessionAsync(votingId, ct);
         if (session is null || session.GroupId != groupId)
             return Result.Fail(new Error(ErrorType.NotFound, "voting.not_found", "Voting session not found."));
 
         if (session.Status != VotingStatus.Open)
             return Result.Fail(new Error(ErrorType.Validation, "voting.not_open", "Voting session is not open."));
 
-        // Duplicate check (case-insensitive)
+        var candidate = await repo.FindCandidateAsync(candidateId, ct);
+        if (candidate is null || candidate.VotingSessionId != votingId)
+            return Result.Fail(new Error(ErrorType.NotFound, "candidate.not_found", "Candidate not found."));
+
+        var vote = await repo.FindLatestUserVoteAsync(votingId, currentUserId, candidateId, ct);
+        if (vote is null)
+            return Result.Fail(new Error(ErrorType.NotFound, "vote.not_found", "You have no vote to remove for this candidate."));
+
+        repo.RemoveVote(vote);
+        await repo.SaveChangesAsync(ct);
+
+        return Result.Ok();
+    }
+
+    public async Task<Result> AddCandidateAsync(Guid groupId, Guid votingId, Guid currentUserId, AddCandidateRequest request, CancellationToken ct = default)
+    {
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
+            return Result.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
+
+        if (string.IsNullOrWhiteSpace(request.CityName) || string.IsNullOrWhiteSpace(request.Country))
+            return Result.Fail(new Error(ErrorType.Validation, "candidate.invalid_input", "CityName and Country are required."));
+
+        var session = await repo.FindSessionAsync(votingId, ct);
+        if (session is null || session.GroupId != groupId)
+            return Result.Fail(new Error(ErrorType.NotFound, "voting.not_found", "Voting session not found."));
+
+        if (session.Status != VotingStatus.Open)
+            return Result.Fail(new Error(ErrorType.Validation, "voting.not_open", "Voting session is not open."));
+
         var city = request.CityName.Trim();
         var country = request.Country.Trim();
 
-        var exists = await db.Candidates.AnyAsync(c =>
-            c.VotingSessionId == votingId &&
-            c.CityName.ToLower() == city.ToLower() &&
-            c.Country.ToLower() == country.ToLower(), ct);
-
-        if (exists)
+        if (await repo.CandidateExistsAsync(votingId, city, country, ct))
             return Result.Fail(new Error(ErrorType.Conflict, "candidate.exists", "Candidate already exists."));
 
-        db.Candidates.Add(new Candidate
+        repo.AddCandidate(new Candidate
         {
             Id = Guid.NewGuid(),
             VotingSessionId = votingId,
@@ -108,34 +102,31 @@ public sealed class VotingService(TripperDbContext db) : IVotingService
             CreatedAt = DateTime.UtcNow
         });
 
-        await db.SaveChangesAsync(ct);
+        await repo.SaveChangesAsync(ct);
         return Result.Ok();
     }
 
     public async Task<Result> CastVoteAsync(Guid groupId, Guid votingId, Guid currentUserId, CastVoteRequest request, CancellationToken ct = default)
     {
-        // Auth: Member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
-        var session = await db.VotingSessions.FirstOrDefaultAsync(vs => vs.Id == votingId, ct);
+        var session = await repo.FindSessionAsync(votingId, ct);
         if (session is null || session.GroupId != groupId)
             return Result.Fail(new Error(ErrorType.NotFound, "voting.not_found", "Voting session not found."));
 
         if (session.Status != VotingStatus.Open)
             return Result.Fail(new Error(ErrorType.Validation, "voting.not_open", "Voting session is not open."));
 
-        var candidate = await db.Candidates.FirstOrDefaultAsync(c => c.Id == request.CandidateId, ct);
+        var candidate = await repo.FindCandidateAsync(request.CandidateId, ct);
         if (candidate is null || candidate.VotingSessionId != votingId)
             return Result.Fail(new Error(ErrorType.NotFound, "candidate.not_found", "Candidate not found."));
 
-        // Check max votes
-        var userVoteCount = await db.Votes.CountAsync(v => v.VotingSessionId == votingId && v.UserId == currentUserId, ct);
+        var userVoteCount = await repo.CountUserVotesAsync(votingId, currentUserId, ct);
         if (userVoteCount >= session.MaxVotesPerMember)
             return Result.Fail(new Error(ErrorType.Validation, "vote.max_reached", $"You have reached the maximum of {session.MaxVotesPerMember} votes."));
 
-        db.Votes.Add(new Vote
+        repo.AddVote(new Vote
         {
             Id = Guid.NewGuid(),
             VotingSessionId = votingId,
@@ -144,32 +135,26 @@ public sealed class VotingService(TripperDbContext db) : IVotingService
             CreatedAt = DateTime.UtcNow
         });
 
-        await db.SaveChangesAsync(ct);
+        await repo.SaveChangesAsync(ct);
         return Result.Ok();
     }
 
     public async Task<Result<CloseVotingResponse>> CloseAsync(Guid groupId, Guid votingId, Guid currentUserId, CancellationToken ct = default)
     {
-        // Auth: Admin
-        var member = await db.GroupMembers.FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
+        var member = await repo.GetMembershipAsync(groupId, currentUserId, ct);
         if (member is null)
             return Result<CloseVotingResponse>.Fail(new Error(ErrorType.NotFound, "group.not_found", "Group not found."));
 
         if (member.Role != GroupRole.Admin)
             return Result<CloseVotingResponse>.Fail(new Error(ErrorType.Forbidden, "group.admin_required", "Admin role required."));
 
-        var session = await db.VotingSessions
-            .Include(vs => vs.Votes)
-            .Include(vs => vs.Candidates)
-            .FirstOrDefaultAsync(vs => vs.Id == votingId, ct);
-
+        var session = await repo.FindSessionWithVotesAndCandidatesAsync(votingId, ct);
         if (session is null || session.GroupId != groupId)
             return Result<CloseVotingResponse>.Fail(new Error(ErrorType.NotFound, "voting.not_found", "Voting session not found."));
 
         if (session.Status != VotingStatus.Open)
             return Result<CloseVotingResponse>.Fail(new Error(ErrorType.Validation, "voting.not_open", "Session is not open."));
 
-        // Winner calculation
         Candidate? winner = null;
 
         var voteCounts = session.Votes
@@ -193,7 +178,7 @@ public sealed class VotingService(TripperDbContext db) : IVotingService
 
         if (winner is not null)
         {
-            var groupEntity = await db.Groups.FirstOrDefaultAsync(g => g.Id == groupId, ct);
+            var groupEntity = await repo.FindGroupAsync(groupId, ct);
             if (groupEntity is not null)
             {
                 groupEntity.DestinationCityName = winner.CityName;
@@ -202,7 +187,7 @@ public sealed class VotingService(TripperDbContext db) : IVotingService
             }
         }
 
-        await db.SaveChangesAsync(ct);
+        await repo.SaveChangesAsync(ct);
 
         return Result<CloseVotingResponse>.Ok(new CloseVotingResponse(winner?.CityName, winner?.Country));
     }

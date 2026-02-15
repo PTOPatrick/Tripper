@@ -1,23 +1,17 @@
-using System.Text;
 using Tripper.API;
 using Tripper.API.Endpoints;
 using Tripper.Application;
 using Tripper.Core.Interfaces;
 using Tripper.Infra;
-using Tripper.Infra.Auth;
 using Tripper.Infra.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
-var jwtConfiguration = configuration.GetSection("JwtSettings");
-var jwtSettings = jwtConfiguration.Get<JwtSettings>();
-var key = Encoding.ASCII.GetBytes(jwtSettings!.Secret);
-var dbConnectionString = configuration.GetConnectionString("DefaultConnection")!;
 
 builder.Services
-    .AddApi(key, jwtConfiguration, jwtSettings)
+    .AddApi(configuration)
     .AddApplication()
-    .AddInfra(dbConnectionString);
+    .AddInfra(configuration);
 
 var app = builder.Build();
 
@@ -47,5 +41,6 @@ app.MapAuthEndpoints();
 app.MapGroupEndpoints();
 app.MapItemEndpoints();
 app.MapVotingEndpoints();
+app.MapCurrencyEndpoints();
 
 app.Run();

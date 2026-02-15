@@ -1,13 +1,13 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Tripper.Application.Common;
+﻿using Tripper.Application.Common;
 using Tripper.Application.DTOs;
 using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Persistence;
+using Tripper.Application.Interfaces.Services;
 using Tripper.Core.Entities;
-using Tripper.Infra.Data;
 
 namespace Tripper.Application.Services;
 
-public sealed class GroupService(TripperDbContext db) : IGroupService
+public sealed class GroupService(IGroupRepository groups, IUserLookupRepository users) : IGroupService
 {
     public async Task<Result<GroupResponse>> CreateAsync(Guid currentUserId, CreateGroupRequest request, CancellationToken ct)
     {
@@ -37,8 +37,8 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
 
         newGroup.Members.Add(member);
 
-        db.Groups.Add(newGroup);
-        await db.SaveChangesAsync(ct);
+        groups.AddGroup(newGroup);
+        await groups.SaveChangesAsync(ct);
 
         return Result<GroupResponse>.Ok(new GroupResponse(
             newGroup.Id, newGroup.Name, newGroup.Description,
@@ -47,44 +47,15 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
     }
 
     public async Task<Result<List<GroupResponse>>> GetMyGroupsAsync(Guid currentUserId, CancellationToken ct)
-    {
-        var groups = await db.GroupMembers
-            .AsNoTracking()
-            .Where(gm => gm.UserId == currentUserId)
-            .Include(gm => gm.Group)
-            .Select(gm => new GroupResponse(
-                gm.Group.Id, gm.Group.Name, gm.Group.Description,
-                gm.Group.DestinationCityName, gm.Group.DestinationCountry,
-                gm.Group.CreatedAt,
-                gm.Group.Members.Count
-            ))
-            .ToListAsync(ct);
-
-        return Result<List<GroupResponse>>.Ok(groups);
-    }
+        => Result<List<GroupResponse>>.Ok(await groups.GetMyGroupsAsync(currentUserId, ct));
 
     public async Task<Result<GroupDetailResponse>> GetDetailsAsync(Guid currentUserId, Guid groupId, CancellationToken ct)
     {
-        var groupMember = await db.GroupMembers
-            .AsNoTracking()
-            .Include(gm => gm.Group)
-                .ThenInclude(g => g.Members)
-                    .ThenInclude(m => m.User)
-            .FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
+        var response = await groups.GetGroupDetailsAsync(groupId, currentUserId, ct);
 
-        if (groupMember is null)
-            return Result<GroupDetailResponse>.Fail(new Error(ErrorType.NotFound, "group.not_found", "Group not found."));
-
-        var g = groupMember.Group;
-
-        var response = new GroupDetailResponse(
-            g.Id, g.Name, g.Description, g.DestinationCityName, g.DestinationCountry, g.CreatedAt,
-            g.Members.Select(m => new GroupMemberDto(
-                m.UserId, m.User.Username, m.User.Email, m.Role, m.JoinedAt
-            )).ToList()
-        );
-
-        return Result<GroupDetailResponse>.Ok(response);
+        return response is null
+            ? Result<GroupDetailResponse>.Fail(new Error(ErrorType.NotFound, "group.not_found", "Group not found."))
+            : Result<GroupDetailResponse>.Ok(response);
     }
 
     public async Task<Result> AddMemberAsync(Guid currentUserId, Guid groupId, AddMemberRequest request, CancellationToken ct)
@@ -98,20 +69,14 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
         if (string.IsNullOrWhiteSpace(request.EmailOrUsername))
             return Result.Fail(new Error(ErrorType.Validation, "member.identifier.required", "Email or username is required."));
 
-        var userToAdd = await db.Users
-            .FirstOrDefaultAsync(u =>
-                u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername, ct);
-
+        var userToAdd = await users.FindByEmailOrUsernameAsync(request.EmailOrUsername, ct);
         if (userToAdd is null)
             return Result.Fail(new Error(ErrorType.Validation, "member.user_not_found", "User not found."));
 
-        var exists = await db.GroupMembers
-            .AnyAsync(gm => gm.GroupId == groupId && gm.UserId == userToAdd.Id, ct);
-
-        if (exists)
+        if (await groups.MemberExistsAsync(groupId, userToAdd.Id, ct))
             return Result.Fail(new Error(ErrorType.Conflict, "member.already_exists", "User is already a member."));
 
-        db.GroupMembers.Add(new GroupMember
+        groups.AddGroupMember(new GroupMember
         {
             GroupId = groupId,
             UserId = userToAdd.Id,
@@ -119,7 +84,7 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
             JoinedAt = DateTime.UtcNow
         });
 
-        await db.SaveChangesAsync(ct);
+        await groups.SaveChangesAsync(ct);
         return Result.Ok();
     }
 
@@ -131,7 +96,7 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
         if (auth.Value!.Role != GroupRole.Admin)
             return Result.Fail(new Error(ErrorType.Forbidden, "group.admin_required", "Admin role required."));
 
-        var group = await db.Groups.FirstOrDefaultAsync(g => g.Id == groupId, ct);
+        var group = await groups.FindGroupAsync(groupId, ct);
         if (group is null)
             return Result.Fail(new Error(ErrorType.NotFound, "group.not_found", "Group not found."));
 
@@ -141,7 +106,7 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
         group.DestinationCountry = request.DestinationCountry?.Trim();
         group.ModifiedAt = DateTime.UtcNow;
 
-        await db.SaveChangesAsync(ct);
+        await groups.SaveChangesAsync(ct);
         return Result.Ok();
     }
 
@@ -153,31 +118,25 @@ public sealed class GroupService(TripperDbContext db) : IGroupService
         if (auth.Value!.Role != GroupRole.Admin)
             return Result.Fail(new Error(ErrorType.Forbidden, "group.admin_required", "Admin role required."));
 
-        var memberToRemove = await db.GroupMembers
-            .FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == memberUserId, ct);
-
+        var memberToRemove = await groups.GetMemberAsync(groupId, memberUserId, ct);
         if (memberToRemove is null)
             return Result.Fail(new Error(ErrorType.NotFound, "member.not_found", "Member not found."));
 
-        // Prevent removing last admin
         if (memberToRemove.Role == GroupRole.Admin)
         {
-            var adminCount = await db.GroupMembers
-                .CountAsync(gm => gm.GroupId == groupId && gm.Role == GroupRole.Admin, ct);
-
+            var adminCount = await groups.CountAdminsAsync(groupId, ct);
             if (adminCount <= 1)
                 return Result.Fail(new Error(ErrorType.Validation, "group.last_admin", "Cannot remove the last admin."));
         }
 
-        db.GroupMembers.Remove(memberToRemove);
-        await db.SaveChangesAsync(ct);
+        groups.RemoveGroupMember(memberToRemove);
+        await groups.SaveChangesAsync(ct);
         return Result.Ok();
     }
-    
+
     private async Task<Result<GroupMember>> GetMemberOrNotFound(Guid currentUserId, Guid groupId, CancellationToken ct)
     {
-        var member = await db.GroupMembers
-            .FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
+        var member = await groups.GetMembershipAsync(groupId, currentUserId, ct);
 
         return member is null
             ? Result<GroupMember>.Fail(new Error(ErrorType.NotFound, "group.not_found", "Group not found."))

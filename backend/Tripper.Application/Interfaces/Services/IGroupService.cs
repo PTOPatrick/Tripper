@@ -1,7 +1,7 @@
 ﻿using Tripper.Application.Common;
 using Tripper.Application.DTOs;
 
-namespace Tripper.Application.Interfaces;
+namespace Tripper.Application.Interfaces.Services;
 
 public interface IGroupService
 {

@@ -1,19 +1,19 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Tripper.Application.Common;
+﻿using Tripper.Application.Common;
 using Tripper.Application.DTOs;
-using Tripper.Application.Interfaces;
+using Tripper.Application.Interfaces.Persistence;
+using Tripper.Application.Interfaces.Services;
+using Tripper.Application.Interfaces.Common;
 using Tripper.Core.Entities;
-using Tripper.Infra.Data;
 
 namespace Tripper.Application.Services;
 
-public sealed class ItemService(TripperDbContext db) : IItemService
+public sealed class ItemService(IItemRepository repo, ICurrencyRateProvider rates) : IItemService
 {
+    private const string BaseCurrency = "CHF";
+
     public async Task<Result<ItemResponse>> CreateAsync(Guid groupId, Guid currentUserId, CreateItemRequest request, CancellationToken ct = default)
     {
-        // Must be member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result<ItemResponse>.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
         if (string.IsNullOrWhiteSpace(request.Title))
@@ -22,32 +22,18 @@ public sealed class ItemService(TripperDbContext db) : IItemService
         if (request.Amount <= 0)
             return Result<ItemResponse>.Fail(new Error(ErrorType.Validation, "item.amount.invalid", "Amount must be greater than 0."));
 
-        // Determine payer (defaults to current user)
         var paidByUserId = request.PaidByMemberId ?? currentUserId;
 
-        // Validate payer is in group
-        var payerInGroup = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == paidByUserId, ct);
-        if (!payerInGroup)
+        if (!await repo.IsUserMemberAsync(groupId, paidByUserId, ct))
             return Result<ItemResponse>.Fail(new Error(ErrorType.Validation, "item.payer.invalid", "Payer must be a member of the group."));
 
-        // Payees default: all members
-        var payees = request.PayeeUserIds?.Distinct().ToList() ?? new List<Guid>();
-        if (payees.Count == 0)
-        {
-            payees = await db.GroupMembers
-                .Where(gm => gm.GroupId == groupId)
-                .Select(gm => gm.UserId)
-                .ToListAsync(ct);
-        }
-        else
-        {
-            // Validate payees all in group
-            var validCount = await db.GroupMembers
-                .CountAsync(gm => gm.GroupId == groupId && payees.Contains(gm.UserId), ct);
+        if (request.PayeeUserIds is null)
+            return Result<ItemResponse>.Fail(new Error(ErrorType.Validation, "item.payees.required", "Payees are required."));
 
-            if (validCount != payees.Count)
-                return Result<ItemResponse>.Fail(new Error(ErrorType.Validation, "item.payees.invalid", "All payees must be members of the group."));
-        }
+        var payees = request.PayeeUserIds.Distinct().ToList();
+        var validCount = await repo.CountMembersMatchingAsync(groupId, payees, ct);
+        if (validCount != payees.Count)
+            return Result<ItemResponse>.Fail(new Error(ErrorType.Validation, "item.payees.invalid", "All payees must be members of the group."));
 
         var now = DateTimeOffset.UtcNow;
 
@@ -57,21 +43,17 @@ public sealed class ItemService(TripperDbContext db) : IItemService
             GroupId = groupId,
             PaidByMemberId = paidByUserId,
             Amount = request.Amount,
-            Currency = request.Currency,
+            Currency = request.Currency.Trim().ToUpperInvariant(),
             Title = request.Title.Trim(),
-            Description = request.Description.Trim(),
+            Description = (request.Description ?? string.Empty).Trim(),
             CreatedAt = now.UtcDateTime,
             PayeeUserIds = payees
         };
 
-        db.Items.Add(item);
-        await db.SaveChangesAsync(ct);
+        repo.Add(item);
+        await repo.SaveChangesAsync(ct);
 
-        // Fetch payer username (for response)
-        var payerUsername = await db.Users
-            .Where(u => u.Id == paidByUserId)
-            .Select(u => u.Username)
-            .FirstOrDefaultAsync(ct) ?? "";
+        var payerUsername = await repo.GetUsernameAsync(paidByUserId, ct) ?? "";
 
         return Result<ItemResponse>.Ok(new ItemResponse(
             item.Id, item.GroupId, item.Title, item.Amount, item.Currency, item.Description,
@@ -81,70 +63,50 @@ public sealed class ItemService(TripperDbContext db) : IItemService
 
     public async Task<Result<List<ItemResponse>>> GetAllAsync(Guid groupId, Guid currentUserId, CancellationToken ct = default)
     {
-        // Must be member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result<List<ItemResponse>>.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
-        var items = await db.Items
-            .AsNoTracking()
-            .Where(i => i.GroupId == groupId)
-            .Include(i => i.PaidByUser)
-            .Select(i => new ItemResponse(
-                i.Id, i.GroupId, i.Title, i.Amount, i.Currency, i.Description,
-                i.PaidByMemberId, i.PaidByUser.Username, i.PayeeUserIds, i.CreatedAt
-            ))
-            .ToListAsync(ct);
-
+        var items = await repo.GetItemsAsync(groupId, ct);
         return Result<List<ItemResponse>>.Ok(items);
     }
 
     public async Task<Result<List<BalanceDto>>> GetBalancesAsync(Guid groupId, Guid currentUserId, CancellationToken ct = default)
     {
-        // Must be member
-        var isMember = await db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-        if (!isMember)
+        if (!await repo.IsMemberAsync(groupId, currentUserId, ct))
             return Result<List<BalanceDto>>.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
-        // Load members (with usernames) and items
-        var members = await db.GroupMembers
-            .AsNoTracking()
-            .Where(gm => gm.GroupId == groupId)
-            .Include(gm => gm.User)
-            .ToListAsync(ct);
+        var usernames = await repo.GetUsernamesAsync(groupId, ct); // userId -> username
+        var items = await repo.GetItemsRawAsync(groupId, ct);
 
-        var items = await db.Items
-            .AsNoTracking()
-            .Where(i => i.GroupId == groupId)
-            .ToListAsync(ct);
-
-        var balances = new Dictionary<Guid, decimal>(capacity: members.Count);
-        foreach (var m in members) balances[m.UserId] = 0m;
+        var balances = new Dictionary<Guid, decimal>(capacity: usernames.Count);
+        foreach (var kvp in usernames) balances[kvp.Key] = 0m;
 
         foreach (var item in items)
         {
-            // payer gets +amount
-            if (!balances.TryAdd(item.PaidByMemberId, item.Amount))
-                balances[item.PaidByMemberId] += item.Amount;
+            // Convert item amount into CHF
+            var fromCur = NormalizeCurrency(item.Currency);
+            var rate = fromCur == BaseCurrency ? 1m : await rates.GetRateAsync(fromCur, BaseCurrency, ct);
+            var amountChf = RoundMoney(item.Amount * rate);
 
-            // payees get -split
+            // payer gets +amount (CHF)
+            if (!balances.TryAdd(item.PaidByMemberId, amountChf))
+                balances[item.PaidByMemberId] = RoundMoney(balances[item.PaidByMemberId] + amountChf);
+
+            // split among payees (CHF)
             if (item.PayeeUserIds.Count == 0) continue;
 
-            var splitAmount = item.Amount / item.PayeeUserIds.Count;
+            var splitAmount = RoundMoney(amountChf / item.PayeeUserIds.Count);
 
-            foreach (var payeeId in item.PayeeUserIds.Where(payeeId => balances.ContainsKey(payeeId)))
-            {
-                balances[payeeId] -= splitAmount;
-            }
+            foreach (var payeeId in item.PayeeUserIds.Where(balances.ContainsKey))
+                balances[payeeId] = RoundMoney(balances[payeeId] - splitAmount);
         }
 
-        // Currency note: you currently hardcode CHF. This keeps parity with your endpoint.
         var result = balances
             .Select(kvp => new BalanceDto(
                 kvp.Key,
-                members.FirstOrDefault(m => m.UserId == kvp.Key)?.User.Username ?? "Unknown",
-                Math.Round(kvp.Value, 2),
-                "CHF"
+                usernames.GetValueOrDefault(kvp.Key, "Unknown"),
+                RoundMoney(kvp.Value),
+                BaseCurrency
             ))
             .ToList();
 
@@ -153,24 +115,29 @@ public sealed class ItemService(TripperDbContext db) : IItemService
 
     public async Task<Result> DeleteAsync(Guid groupId, Guid itemId, Guid currentUserId, CancellationToken ct = default)
     {
-        // Must be member (and we need role)
-        var member = await db.GroupMembers
-            .FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == currentUserId, ct);
-
+        var member = await repo.GetMembershipAsync(groupId, currentUserId, ct);
         if (member is null)
             return Result.Fail(new Error(ErrorType.Forbidden, "group.not_member", "You are not a member of this group."));
 
-        var item = await db.Items.FirstOrDefaultAsync(i => i.Id == itemId, ct);
+        var item = await repo.FindByIdAsync(itemId, ct);
         if (item is null || item.GroupId != groupId)
             return Result.Fail(new Error(ErrorType.NotFound, "item.not_found", "Item not found."));
 
-        // Admin or owner
         if (member.Role != GroupRole.Admin && item.PaidByMemberId != currentUserId)
             return Result.Fail(new Error(ErrorType.Forbidden, "item.forbidden", "You are not allowed to delete this item."));
 
-        db.Items.Remove(item);
-        await db.SaveChangesAsync(ct);
+        repo.Remove(item);
+        await repo.SaveChangesAsync(ct);
 
         return Result.Ok();
     }
+
+    private static string NormalizeCurrency(string? value)
+    {
+        var c = (value ?? BaseCurrency).Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(c) ? BaseCurrency : c;
+    }
+
+    private static decimal RoundMoney(decimal value)
+        => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 }

@@ -55,6 +55,17 @@ namespace Tripper.Infra.Migrations
                     b.ToTable("Candidates");
                 });
 
+            modelBuilder.Entity("Tripper.Core.Entities.Currency", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("Currencies", (string)null);
+                });
+
             modelBuilder.Entity("Tripper.Core.Entities.Group", b =>
                 {
                     b.Property<Guid>("Id")
@@ -148,6 +159,65 @@ namespace Tripper.Infra.Migrations
                     b.HasIndex("PaidByMemberId");
 
                     b.ToTable("Items");
+                });
+
+            modelBuilder.Entity("Tripper.Core.Entities.SettlementSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BaseCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ItemsIncludedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RatesAsOfUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "CreatedAt");
+
+                    b.ToTable("SettlementSnapshots");
+                });
+
+            modelBuilder.Entity("Tripper.Core.Entities.SettlementTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("FromUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SettlementSnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementSnapshotId");
+
+                    b.ToTable("SettlementTransfers");
                 });
 
             modelBuilder.Entity("Tripper.Core.Entities.User", b =>
@@ -294,6 +364,26 @@ namespace Tripper.Infra.Migrations
                     b.Navigation("PaidByUser");
                 });
 
+            modelBuilder.Entity("Tripper.Core.Entities.SettlementSnapshot", b =>
+                {
+                    b.HasOne("Tripper.Core.Entities.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Tripper.Core.Entities.SettlementTransfer", b =>
+                {
+                    b.HasOne("Tripper.Core.Entities.SettlementSnapshot", "SettlementSnapshot")
+                        .WithMany("Transfers")
+                        .HasForeignKey("SettlementSnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SettlementSnapshot");
+                });
+
             modelBuilder.Entity("Tripper.Core.Entities.Vote", b =>
                 {
                     b.HasOne("Tripper.Core.Entities.Candidate", null)
@@ -327,6 +417,11 @@ namespace Tripper.Infra.Migrations
                     b.Navigation("Members");
 
                     b.Navigation("VotingSessions");
+                });
+
+            modelBuilder.Entity("Tripper.Core.Entities.SettlementSnapshot", b =>
+                {
+                    b.Navigation("Transfers");
                 });
 
             modelBuilder.Entity("Tripper.Core.Entities.VotingSession", b =>

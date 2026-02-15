@@ -6,280 +6,284 @@ namespace Tripper.Infra.Data;
 
 public static class TripperDbSeeder
 {
-    // Deterministic seed so your data is reproducible between runs
-    private const int Seed = 42;
-
-    public static async Task SeedAsync(
-        TripperDbContext db,
-        IPasswordHasher passwordHasher,
-        CancellationToken ct = default)
+    public static async Task SeedAsync(TripperDbContext db, IPasswordHasher hasher, CancellationToken ct = default)
     {
-        // Ensure DB exists & is migrated
-        await db.Database.MigrateAsync(ct);
+        // -----------------------------
+        // CURRENCIES (Lookup table)
+        // -----------------------------
+        var currencyCodes = new[]
+        {
+            "AED","AFN","ALL","AMD","ANG","AOA","ARS","AUD","AWG","AZN",
+            "BAM","BBD","BDT","BGN","BHD","BIF","BMD","BND","BOB","BRL",
+            "BSD","BTN","BWP","BYN","BZD",
+            "CAD","CDF","CHF","CLF","CLP","CNH","CNY","COP","CRC","CUP","CVE","CZK",
+            "DJF","DKK","DOP","DZD",
+            "EGP","ERN","ETB","EUR",
+            "FJD","FKP","FOK",
+            "GBP","GEL","GGP","GHS","GIP","GMD","GNF","GTQ","GYD",
+            "HKD","HNL","HRK","HTG","HUF",
+            "IDR","ILS","IMP","INR","IQD","IRR","ISK",
+            "JEP","JMD","JOD","JPY",
+            "KES","KGS","KHR","KID","KMF","KRW","KWD","KYD","KZT",
+            "LAK","LBP","LKR","LRD","LSL","LYD",
+            "MAD","MDL","MGA","MKD","MMK","MNT","MOP","MRU","MUR","MVR","MWK","MXN","MYR","MZN",
+            "NAD","NGN","NIO","NOK","NPR","NZD",
+            "OMR",
+            "PAB","PEN","PGK","PHP","PKR","PLN","PYG",
+            "QAR",
+            "RON","RSD","RUB","RWF",
+            "SAR","SBD","SCR","SDG","SEK","SGD","SHP","SLE","SLL","SOS","SRD","SSP","STN","SYP","SZL",
+            "THB","TJS","TMT","TND","TOP","TRY","TTD","TVD","TWD","TZS",
+            "UAH","UGX","USD","UYU","UZS",
+            "VES","VND","VUV",
+            "WST",
+            "XAF","XCD","XCG","XDR","XOF","XPF",
+            "YER",
+            "ZAR","ZMW","ZWG","ZWL"
+        };
 
-        // One-time seed guard
+        var wanted = currencyCodes
+            .Select(c => c.Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0)
+            .Distinct()
+            .ToList();
+
+        var existing = await db.Currencies
+            .AsNoTracking()
+            .Select(c => c.Code)
+            .ToListAsync(cancellationToken: ct);
+
+        var existingSet = existing
+            .Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .ToHashSet();
+
+        var missing = wanted
+            .Where(code => !existingSet.Contains(code))
+            .ToList();
+
+        if (missing.Count > 0)
+        {
+            db.Currencies.AddRange(missing.Select(code => new Core.Entities.Currency
+            {
+                Code = code
+            }));
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        // --- Guard: Do not reseed ---
         if (await db.Users.AnyAsync(ct))
             return;
 
-        var rng = new Random(Seed);
-        var now = DateTime.UtcNow;
+        var rng = new Random();
 
-        // Real cities + countries (curated list, no web call)
-        var cities = CityData.All;
-
-        // --- USERS (250) ---
-        var users = new List<User>(capacity: 250);
-        for (var i = 1; i <= 250; i++)
-        {
-            var username = $"user{i:000}";
-            var email = $"{username}@tripper.local";
-            users.Add(new User
+        // -----------------------------
+        // USERS (100)
+        // -----------------------------
+        var users = Enumerable.Range(1, 100)
+            .Select(i => new User
             {
                 Id = Guid.NewGuid(),
-                Username = username,
-                Email = email,
-                PasswordHash = passwordHasher.HashPassword("Password123!"),
-                CreatedAt = now.AddDays(-rng.Next(0, 365))
-            });
-        }
+                Username = $"user{i}",
+                Email = $"user{i}@mail.com",
+                PasswordHash = hasher.HashPassword("Password123!")
+            })
+            .ToList();
 
         db.Users.AddRange(users);
         await db.SaveChangesAsync(ct);
 
-        // --- GROUPS (50) + MEMBERS (50..80) + ITEMS (100..150) + CLOSED VOTING ---
-        var groups = new List<Group>(capacity: 50);
-        var groupMembers = new List<GroupMember>(capacity: 50 * 70);
-        var items = new List<Item>(capacity: 50 * 125);
-        var votingSessions = new List<VotingSession>(capacity: 50);
-        var candidates = new List<Candidate>(capacity: 50 * 10);
-        var votes = new List<Vote>(capacity: 50 * 70);
-
-        var currencies = new[] { "CHF", "EUR", "USD", "GBP", "JPY" };
-        var itemTitles = new[]
+        // -----------------------------
+        // REAL CITIES
+        // -----------------------------
+        var cities = new (string City, string Country)[]
         {
-            "Hotel", "Dinner", "Groceries", "Museum Tickets", "Train", "Taxi",
-            "Flight", "Coffee", "Drinks", "Souvenirs", "SIM Card", "Parking",
-            "Guided Tour", "Event Tickets", "Car Rental"
+            ("Zurich","Switzerland"),("Geneva","Switzerland"),("Bern","Switzerland"),
+            ("Paris","France"),("Lyon","France"),("Nice","France"),
+            ("Berlin","Germany"),("Munich","Germany"),("Hamburg","Germany"),
+            ("Vienna","Austria"),("Salzburg","Austria"),
+            ("Rome","Italy"),("Milan","Italy"),("Florence","Italy"),
+            ("Barcelona","Spain"),("Madrid","Spain"),("Valencia","Spain"),
+            ("Amsterdam","Netherlands"),("Rotterdam","Netherlands"),
+            ("London","United Kingdom"),("Edinburgh","United Kingdom"),
+            ("Prague","Czech Republic"),("Budapest","Hungary"),
+            ("Lisbon","Portugal"),("Porto","Portugal"),
+            ("New York","USA"),("Los Angeles","USA"),("Chicago","USA"),
+            ("Tokyo","Japan"),("Osaka","Japan"),
+            ("Bangkok","Thailand"),("Singapore","Singapore"),
+            ("Dubai","UAE"),("Istanbul","Turkey"),
+            ("Copenhagen","Denmark"),("Stockholm","Sweden"),("Oslo","Norway")
         };
 
-        for (var g = 1; g <= 50; g++)
+        // -----------------------------
+        // GROUPS (20)
+        // -----------------------------
+        var now = DateTime.UtcNow;
+
+        var groups = Enumerable.Range(1, 20)
+            .Select(i =>
+            {
+                var city = cities[rng.Next(cities.Length)];
+                return new Group
+                {
+                    Id = Guid.NewGuid(),
+                    Name = $"Trip Group {i}",
+                    Description = "Seeded travel group",
+                    DestinationCityName = city.City,
+                    DestinationCountry = city.Country,
+                    CreatedAt = now,
+                    ModifiedAt = now
+                };
+            })
+            .ToList();
+
+        db.Groups.AddRange(groups);
+        await db.SaveChangesAsync(ct);
+
+        // -----------------------------
+        // MEMBERS (5..8 per group)
+        // -----------------------------
+        var members = new List<GroupMember>();
+
+        foreach (var group in groups)
         {
-            var groupId = Guid.NewGuid();
+            var groupSize = rng.Next(5, 9); // 5..8
+            var selectedUsers = users
+                .OrderBy(_ => rng.Next())
+                .Take(groupSize)
+                .ToList();
 
-            // Group meta (destination will be set after voting)
-            var group = new Group
+            for (int i = 0; i < selectedUsers.Count; i++)
             {
-                Id = groupId,
-                Name = $"Tripper Group {g:00}",
-                Description = $"Seeded demo group #{g:00} for Tripper MVP.",
-                CreatedAt = now.AddDays(-rng.Next(0, 180)),
-                ModifiedAt = now.AddDays(-rng.Next(0, 30))
-            };
-            groups.Add(group);
+                members.Add(new GroupMember
+                {
+                    GroupId = group.Id,
+                    UserId = selectedUsers[i].Id,
+                    Role = i == 0 ? GroupRole.Admin : GroupRole.Contributor,
+                    JoinedAt = now.AddDays(-rng.Next(0, 60))
+                });
+            }
+        }
 
-            // Members 50..80
-            var memberCount = rng.Next(50, 81);
-            var memberUsers = PickDistinctUsers(rng, users, memberCount);
+        db.GroupMembers.AddRange(members);
+        await db.SaveChangesAsync(ct);
 
-            // Admins 2..5
-            var adminCount = rng.Next(2, 6);
-            var adminUsers = memberUsers.OrderBy(_ => rng.Next()).Take(adminCount).ToHashSet();
+        // -----------------------------
+        // ITEMS (20..30 per group, CHF only)
+        // -----------------------------
+        var items = new List<Item>();
 
-            groupMembers.AddRange(
-                memberUsers.Select(u => new GroupMember
-                    {
-                        GroupId = groupId, 
-                        UserId = u.Id, 
-                        Role = adminUsers.Contains(u) ? GroupRole.Admin : GroupRole.Contributor, 
-                        JoinedAt = group.CreatedAt.AddDays(rng.Next(0, 30))
-                    }));
+        foreach (var group in groups)
+        {
+            var groupMembers = members.Where(m => m.GroupId == group.Id).ToList();
+            var itemCount = rng.Next(20, 31); // 20..30
 
-            // Items 100..150
-            var itemCount = rng.Next(100, 151);
-            for (var i = 0; i < itemCount; i++)
+            for (int i = 0; i < itemCount; i++)
             {
-                var paidBy = memberUsers[rng.Next(memberUsers.Count)];
-                var payeeCount = rng.Next(2, Math.Min(11, memberUsers.Count + 1)); // 2..10
-                var payees = memberUsers
+                var payer = groupMembers[rng.Next(groupMembers.Count)];
+
+                // payees: at least 1, up to groupMembers.Count (but not too many)
+                var maxPayees = Math.Min(groupMembers.Count, 6);
+                var payeeCount = rng.Next(1, maxPayees + 1);
+
+                var payees = groupMembers
                     .OrderBy(_ => rng.Next())
                     .Take(payeeCount)
-                    .Select(u => u.Id)
-                    .Distinct()
+                    .Select(m => m.UserId)
                     .ToList();
 
-                // Ensure paidBy is usually among payees (optional, but realistic)
-                if (!payees.Contains(paidBy.Id) && rng.NextDouble() < 0.75)
-                    payees.Add(paidBy.Id);
-
-                var createdAt = group.CreatedAt.AddDays(rng.Next(0, 30)).AddMinutes(rng.Next(0, 1440));
-
+                // payer muss NICHT automatisch payee sein (wie du es wolltest)
                 items.Add(new Item
                 {
                     Id = Guid.NewGuid(),
-                    GroupId = groupId,
-                    PaidByMemberId = paidBy.Id,   // NOTE: this is a UserId in your model
-                    Amount = Math.Round((decimal)(rng.NextDouble() * 250.0 + 5.0), 2),
-                    Currency = currencies[rng.Next(currencies.Length)],
-                    Title = itemTitles[rng.Next(itemTitles.Length)],
-                    Description = "Seeded expense item (demo data).",
-                    CreatedAt = createdAt,
+                    GroupId = group.Id,
+                    PaidByMemberId = payer.UserId,
+                    Title = $"Expense {i + 1}",
+                    Description = rng.NextDouble() < 0.35 ? "Seeded expense details" : "", // etwas variieren
+                    Amount = Math.Round((decimal)(rng.NextDouble() * 200 + 5), 2), // 5..205
+                    Currency = "CHF",
+                    CreatedAt = now.AddDays(-rng.Next(0, 30)),
                     PayeeUserIds = payees
                 });
             }
-
-            // Voting session (one per group, already closed)
-            var votingId = Guid.NewGuid();
-            const int maxVotes = 1; // keep it simple: every member votes once (matches your requirement nicely)
-
-            var vs = new VotingSession
-            {
-                Id = votingId,
-                GroupId = groupId,
-                Status = VotingStatus.Closed,
-                MaxVotesPerMember = maxVotes,
-                CreatedAt = group.CreatedAt.AddDays(rng.Next(0, 7)),
-                ClosedAt = group.CreatedAt.AddDays(rng.Next(7, 21))
-            };
-            votingSessions.Add(vs);
-
-            // Candidates 6..12 distinct cities
-            var candidateCount = rng.Next(6, 13);
-            var candidateCities = cities.OrderBy(_ => rng.Next()).Take(candidateCount).ToList();
-
-            // Pick a winner and bias votes toward it
-            var winnerIndex = rng.Next(candidateCities.Count);
-            var winner = candidateCities[winnerIndex];
-
-            var candidateIds = new List<Guid>(candidateCount);
-            for (var c = 0; c < candidateCount; c++)
-            {
-                var createdBy = memberUsers[rng.Next(memberUsers.Count)];
-                var (city, country) = candidateCities[c];
-
-                var cid = Guid.NewGuid();
-                candidateIds.Add(cid);
-
-                candidates.Add(new Candidate
-                {
-                    Id = cid,
-                    VotingSessionId = votingId,
-                    CityName = city,
-                    Country = country,
-                    CreatedByUserId = createdBy.Id,
-                    CreatedAt = vs.CreatedAt.AddMinutes(rng.Next(0, 600))
-                });
-            }
-
-            // Votes: every member votes once; 60% chance for winner, else random among others
-            var winnerCandidateId = candidateIds[winnerIndex];
-
-            foreach (var u in memberUsers)
-            {
-                var pickWinner = rng.NextDouble() < 0.60;
-                Guid chosenCandidateId;
-
-                if (pickWinner)
-                {
-                    chosenCandidateId = winnerCandidateId;
-                }
-                else
-                {
-                    // choose among non-winner
-                    var alt = candidateIds.Where(id => id != winnerCandidateId).ToList();
-                    chosenCandidateId = alt[rng.Next(alt.Count)];
-                }
-
-                votes.Add(new Vote
-                {
-                    Id = Guid.NewGuid(),
-                    VotingSessionId = votingId,
-                    CandidateId = chosenCandidateId,
-                    UserId = u.Id,
-                    CreatedAt = vs.CreatedAt.AddMinutes(rng.Next(0, 1440))
-                });
-            }
-
-            // Set group destination to the winning city/country
-            group.DestinationCityName = winner.city;
-            group.DestinationCountry = winner.country;
-            group.ModifiedAt = vs.ClosedAt ?? group.ModifiedAt;
         }
 
-        db.Groups.AddRange(groups);
-        db.GroupMembers.AddRange(groupMembers);
         db.Items.AddRange(items);
-        db.VotingSessions.AddRange(votingSessions);
+        await db.SaveChangesAsync(ct);
+
+        // -----------------------------
+        // VOTING SESSIONS + CANDIDATES + VOTES (optional / kleiner)
+        // -----------------------------
+        // Wenn du’s noch stärker entschlacken willst: diesen Block einfach löschen.
+        var sessions = new List<VotingSession>();
+        var candidates = new List<Candidate>();
+        var votes = new List<Vote>();
+
+        foreach (var group in groups)
+        {
+            var session = new VotingSession
+            {
+                Id = Guid.NewGuid(),
+                GroupId = group.Id,
+                Status = VotingStatus.Closed,
+                MaxVotesPerMember = rng.Next(2, 5),
+                CreatedAt = now.AddDays(-rng.Next(5, 25)),
+                ClosedAt = now.AddDays(-rng.Next(1, 5))
+            };
+
+            sessions.Add(session);
+
+            var candidateCities = cities.OrderBy(_ => rng.Next()).Take(5).ToList();
+            var groupMembers = members.Where(m => m.GroupId == group.Id).ToList();
+
+            var sessionCandidates = candidateCities.Select(city => new Candidate
+            {
+                Id = Guid.NewGuid(),
+                VotingSessionId = session.Id,
+                CityName = city.City,
+                Country = city.Country,
+                CreatedByUserId = groupMembers[rng.Next(groupMembers.Count)].UserId,
+                CreatedAt = session.CreatedAt.AddMinutes(rng.Next(1, 120))
+            }).ToList();
+
+            candidates.AddRange(sessionCandidates);
+
+            foreach (var member in groupMembers)
+            {
+                var voteCount = rng.Next(1, session.MaxVotesPerMember + 1);
+                for (int v = 0; v < voteCount; v++)
+                {
+                    var cand = sessionCandidates[rng.Next(sessionCandidates.Count)];
+                    votes.Add(new Vote
+                    {
+                        Id = Guid.NewGuid(),
+                        VotingSessionId = session.Id,
+                        CandidateId = cand.Id,
+                        UserId = member.UserId,
+                        CreatedAt = session.CreatedAt.AddMinutes(rng.Next(1, 240))
+                    });
+                }
+            }
+
+            var winner = votes
+                .Where(v => v.VotingSessionId == session.Id)
+                .GroupBy(v => v.CandidateId)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault();
+
+            var winningCandidate = sessionCandidates.FirstOrDefault(c => c.Id == winner);
+            if (winningCandidate != null)
+            {
+                group.DestinationCityName = winningCandidate.CityName;
+                group.DestinationCountry = winningCandidate.Country;
+            }
+        }
+
+        db.VotingSessions.AddRange(sessions);
         db.Candidates.AddRange(candidates);
         db.Votes.AddRange(votes);
 
         await db.SaveChangesAsync(ct);
-        return;
-
-        // Helper: pick N distinct users from pool
-        static List<User> PickDistinctUsers(Random rng, List<User> pool, int n)
-        {
-            // Fisher-Yates partial shuffle via indices
-            var indices = Enumerable.Range(0, pool.Count).ToArray();
-            for (var i = 0; i < n; i++)
-            {
-                var j = rng.Next(i, indices.Length);
-                (indices[i], indices[j]) = (indices[j], indices[i]);
-            }
-            var result = new List<User>(n);
-            for (var i = 0; i < n; i++) result.Add(pool[indices[i]]);
-            return result;
-        }
-    }
-
-    private static class CityData
-    {
-        public static readonly List<(string city, string country)> All =
-        [
-            ("Zurich", "Switzerland"), ("Geneva", "Switzerland"), ("Bern", "Switzerland"), ("Basel", "Switzerland"),
-            ("Paris", "France"), ("Lyon", "France"), ("Marseille", "France"), ("Nice", "France"),
-            ("Berlin", "Germany"), ("Munich", "Germany"), ("Hamburg", "Germany"), ("Cologne", "Germany"),
-            ("Vienna", "Austria"), ("Salzburg", "Austria"), ("Graz", "Austria"),
-            ("Rome", "Italy"), ("Milan", "Italy"), ("Florence", "Italy"), ("Venice", "Italy"), ("Naples", "Italy"),
-            ("Barcelona", "Spain"), ("Madrid", "Spain"), ("Valencia", "Spain"), ("Seville", "Spain"),
-            ("Lisbon", "Portugal"), ("Porto", "Portugal"),
-            ("Amsterdam", "Netherlands"), ("Rotterdam", "Netherlands"), ("Utrecht", "Netherlands"),
-            ("Brussels", "Belgium"), ("Antwerp", "Belgium"), ("Ghent", "Belgium"),
-            ("London", "United Kingdom"), ("Edinburgh", "United Kingdom"), ("Manchester", "United Kingdom"),
-            ("Glasgow", "United Kingdom"),
-            ("Dublin", "Ireland"), ("Cork", "Ireland"),
-            ("Copenhagen", "Denmark"), ("Aarhus", "Denmark"),
-            ("Stockholm", "Sweden"), ("Gothenburg", "Sweden"), ("Malmo", "Sweden"),
-            ("Oslo", "Norway"), ("Bergen", "Norway"),
-            ("Helsinki", "Finland"), ("Turku", "Finland"),
-            ("Prague", "Czechia"), ("Brno", "Czechia"),
-            ("Warsaw", "Poland"), ("Krakow", "Poland"), ("Gdansk", "Poland"), ("Wroclaw", "Poland"),
-            ("Budapest", "Hungary"),
-            ("Athens", "Greece"), ("Thessaloniki", "Greece"),
-            ("Istanbul", "Turkey"), ("Ankara", "Turkey"),
-            ("Reykjavik", "Iceland"),
-            ("New York", "United States"), ("San Francisco", "United States"), ("Chicago", "United States"),
-            ("Boston", "United States"),
-            ("Toronto", "Canada"), ("Vancouver", "Canada"), ("Montreal", "Canada"),
-            ("Mexico City", "Mexico"),
-            ("Rio de Janeiro", "Brazil"), ("Sao Paulo", "Brazil"),
-            ("Buenos Aires", "Argentina"),
-            ("Santiago", "Chile"),
-            ("Bogota", "Colombia"),
-            ("Tokyo", "Japan"), ("Kyoto", "Japan"), ("Osaka", "Japan"), ("Sapporo", "Japan"),
-            ("Seoul", "South Korea"), ("Busan", "South Korea"),
-            ("Beijing", "China"), ("Shanghai", "China"), ("Shenzhen", "China"), ("Hong Kong", "China"),
-            ("Singapore", "Singapore"),
-            ("Bangkok", "Thailand"), ("Chiang Mai", "Thailand"),
-            ("Hanoi", "Vietnam"), ("Ho Chi Minh City", "Vietnam"),
-            ("Kuala Lumpur", "Malaysia"),
-            ("Jakarta", "Indonesia"), ("Bali (Denpasar)", "Indonesia"),
-            ("Sydney", "Australia"), ("Melbourne", "Australia"), ("Brisbane", "Australia"),
-            ("Auckland", "New Zealand"),
-            ("Dubai", "United Arab Emirates"), ("Abu Dhabi", "United Arab Emirates"),
-            ("Tel Aviv", "Israel"),
-            ("Cairo", "Egypt"),
-            ("Marrakesh", "Morocco"), ("Casablanca", "Morocco"),
-            ("Cape Town", "South Africa"), ("Johannesburg", "South Africa")
-        ];
     }
 }
