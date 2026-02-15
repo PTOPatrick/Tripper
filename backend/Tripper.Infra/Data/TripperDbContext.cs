@@ -33,6 +33,10 @@ public class TripperDbContext(DbContextOptions<TripperDbContext> options) : DbCo
         // GroupMember composite key
         modelBuilder.Entity<GroupMember>()
             .HasKey(gm => new { gm.GroupId, gm.UserId });
+        
+        modelBuilder.Entity<GroupMember>()
+            .HasIndex(x => new { x.GroupId, x.UserId })
+            .IsUnique();
 
         modelBuilder.Entity<GroupMember>()
             .HasOne(gm => gm.Group)

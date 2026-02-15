@@ -9,25 +9,36 @@ namespace Tripper.Infra.Repositories;
 public sealed class GroupRepository(TripperDbContext db) : IGroupRepository
 {
     public void AddGroup(Group group) => db.Groups.Add(group);
+    
     public void AddGroupMember(GroupMember member) => db.GroupMembers.Add(member);
-    public void RemoveGroupMember(GroupMember member) => db.GroupMembers.Remove(member);
+    
+    public void RemoveGroupMember(GroupMember member)
+    {
+        member.LeftAt = DateTime.UtcNow;
+        db.GroupMembers.Update(member);
+    }
 
     public Task<Group?> FindGroupAsync(Guid groupId, CancellationToken ct) =>
         db.Groups.FirstOrDefaultAsync(g => g.Id == groupId, ct);
 
     public Task<int> SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
 
-    public Task<GroupMember?> GetMembershipAsync(Guid groupId, Guid userId, CancellationToken ct) =>
-        db.GroupMembers.FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == userId, ct);
+    public Task<GroupMember?> GetMembershipAsync(Guid groupId, Guid userId, CancellationToken ct)
+        => db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == userId && m.LeftAt == null && m.LeftAt == null, ct);
 
+    public Task<GroupMember?> GetMembershipIncludingInactiveAsync(Guid groupId, Guid userId, CancellationToken ct)
+        => db.GroupMembers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == userId, ct);
+    
     public Task<bool> IsMemberAsync(Guid groupId, Guid userId, CancellationToken ct) =>
         db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == userId, ct);
 
     public Task<int> CountAdminsAsync(Guid groupId, CancellationToken ct) =>
-        db.GroupMembers.CountAsync(gm => gm.GroupId == groupId && gm.Role == GroupRole.Admin, ct);
+        db.GroupMembers.CountAsync(gm => gm.GroupId == groupId && gm.Role == GroupRole.Admin && gm.LeftAt == null, ct);
 
     public Task<bool> MemberExistsAsync(Guid groupId, Guid userId, CancellationToken ct) =>
-        db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == userId, ct);
+        db.GroupMembers.AnyAsync(gm => gm.GroupId == groupId && gm.UserId == userId && gm.LeftAt == null, ct);
 
     public Task<GroupMember?> GetMemberAsync(Guid groupId, Guid memberUserId, CancellationToken ct) =>
         db.GroupMembers.FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == memberUserId, ct);
@@ -50,7 +61,7 @@ public sealed class GroupRepository(TripperDbContext db) : IGroupRepository
     public Task<GroupDetailResponse?> GetGroupDetailsAsync(Guid groupId, Guid userId, CancellationToken ct) =>
         db.Groups
             .AsNoTracking()
-            .Where(g => g.Id == groupId && g.Members.Any(m => m.UserId == userId))
+            .Where(g => g.Id == groupId && g.Members.Any(m => m.UserId == userId && m.LeftAt == null))
             .Select(g => new GroupDetailResponse(
                 g.Id,
                 g.Name,
@@ -58,13 +69,15 @@ public sealed class GroupRepository(TripperDbContext db) : IGroupRepository
                 g.DestinationCityName,
                 g.DestinationCountry,
                 g.CreatedAt,
-                g.Members.Select(m => new GroupMemberDto(
-                    m.UserId,
-                    m.User.Username,
-                    m.User.Email,
-                    m.Role,
-                    m.JoinedAt
-                )).ToList()
+                g.Members
+                    .Where(m => m.LeftAt == null)
+                    .Select(m => new GroupMemberDto(
+                        m.UserId,
+                        m.User.Username,
+                        m.User.Email,
+                        m.Role,
+                        m.JoinedAt)
+                    ).ToList()
             ))
             .FirstOrDefaultAsync(ct);
 }

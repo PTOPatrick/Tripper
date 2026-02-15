@@ -1,6 +1,5 @@
 ﻿using Tripper.Application.Common;
 using Tripper.Application.DTOs;
-using Tripper.Application.Interfaces;
 using Tripper.Application.Interfaces.Persistence;
 using Tripper.Application.Interfaces.Services;
 using Tripper.Core.Entities;
@@ -20,7 +19,7 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
-            Description = request.Description.Trim(),
+            Description = request.Description .Trim(),
             DestinationCityName = request.DestinationCityName?.Trim(),
             DestinationCountry = request.DestinationCountry?.Trim(),
             CreatedAt = now.UtcDateTime,
@@ -32,7 +31,8 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
             GroupId = newGroup.Id,
             UserId = currentUserId,
             Role = GroupRole.Admin,
-            JoinedAt = now.UtcDateTime
+            JoinedAt = now.UtcDateTime,
+            LeftAt = null
         };
 
         newGroup.Members.Add(member);
@@ -41,9 +41,13 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
         await groups.SaveChangesAsync(ct);
 
         return Result<GroupResponse>.Ok(new GroupResponse(
-            newGroup.Id, newGroup.Name, newGroup.Description,
-            newGroup.DestinationCityName, newGroup.DestinationCountry,
-            newGroup.CreatedAt, 1));
+            newGroup.Id,
+            newGroup.Name,
+            newGroup.Description,
+            newGroup.DestinationCityName,
+            newGroup.DestinationCountry,
+            newGroup.CreatedAt,
+            1));
     }
 
     public async Task<Result<List<GroupResponse>>> GetMyGroupsAsync(Guid currentUserId, CancellationToken ct)
@@ -60,7 +64,7 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
 
     public async Task<Result> AddMemberAsync(Guid currentUserId, Guid groupId, AddMemberRequest request, CancellationToken ct)
     {
-        var auth = await GetMemberOrNotFound(currentUserId, groupId, ct);
+        var auth = await GetActiveMemberOrNotFound(currentUserId, groupId, ct);
         if (!auth.IsSuccess) return Result.Fail(auth.Error!);
 
         if (auth.Value!.Role != GroupRole.Admin)
@@ -73,6 +77,7 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
         if (userToAdd is null)
             return Result.Fail(new Error(ErrorType.Validation, "member.user_not_found", "User not found."));
 
+        // IMPORTANT: MemberExistsAsync should check "LeftAt == null" (active membership)
         if (await groups.MemberExistsAsync(groupId, userToAdd.Id, ct))
             return Result.Fail(new Error(ErrorType.Conflict, "member.already_exists", "User is already a member."));
 
@@ -81,7 +86,8 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
             GroupId = groupId,
             UserId = userToAdd.Id,
             Role = GroupRole.Contributor,
-            JoinedAt = DateTime.UtcNow
+            JoinedAt = DateTime.UtcNow,
+            LeftAt = null
         });
 
         await groups.SaveChangesAsync(ct);
@@ -90,7 +96,7 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
 
     public async Task<Result> UpdateAsync(Guid currentUserId, Guid groupId, UpdateGroupRequest request, CancellationToken ct)
     {
-        var auth = await GetMemberOrNotFound(currentUserId, groupId, ct);
+        var auth = await GetActiveMemberOrNotFound(currentUserId, groupId, ct);
         if (!auth.IsSuccess) return Result.Fail(auth.Error!);
 
         if (auth.Value!.Role != GroupRole.Admin)
@@ -112,30 +118,43 @@ public sealed class GroupService(IGroupRepository groups, IUserLookupRepository 
 
     public async Task<Result> RemoveMemberAsync(Guid currentUserId, Guid groupId, Guid memberUserId, CancellationToken ct)
     {
-        var auth = await GetMemberOrNotFound(currentUserId, groupId, ct);
+        // Auth: current user must be an ACTIVE member
+        var auth = await GetActiveMemberOrNotFound(currentUserId, groupId, ct);
         if (!auth.IsSuccess) return Result.Fail(auth.Error!);
 
         if (auth.Value!.Role != GroupRole.Admin)
             return Result.Fail(new Error(ErrorType.Forbidden, "group.admin_required", "Admin role required."));
 
+        // You can either:
+        // - implement GetMemberAsync so it also returns entries with "LeftAt != null" (to allow idempotent OK)
+        // - or return only active ones. Then "Member not found" simply means "already removed".
         var memberToRemove = await groups.GetMemberAsync(groupId, memberUserId, ct);
         if (memberToRemove is null)
             return Result.Fail(new Error(ErrorType.NotFound, "member.not_found", "Member not found."));
 
+        // Optional: Idempotency
+        if (memberToRemove.LeftAt is not null)
+            return Result.Ok();
+
+        // If the member to remove is an admin: ensure at least one active admin remains
         if (memberToRemove.Role == GroupRole.Admin)
         {
+            // IMPORTANT: CountAdminsAsync must count ONLY active admins (LeftAt == null)
             var adminCount = await groups.CountAdminsAsync(groupId, ct);
             if (adminCount <= 1)
                 return Result.Fail(new Error(ErrorType.Validation, "group.last_admin", "Cannot remove the last admin."));
         }
 
-        groups.RemoveGroupMember(memberToRemove);
+        // Soft remove
+        memberToRemove.LeftAt = DateTime.UtcNow;
+
         await groups.SaveChangesAsync(ct);
         return Result.Ok();
     }
 
-    private async Task<Result<GroupMember>> GetMemberOrNotFound(Guid currentUserId, Guid groupId, CancellationToken ct)
+    private async Task<Result<GroupMember>> GetActiveMemberOrNotFound(Guid currentUserId, Guid groupId, CancellationToken ct)
     {
+        // IMPORTANT: GetMembershipAsync must return ONLY active memberships (LeftAt == null)
         var member = await groups.GetMembershipAsync(groupId, currentUserId, ct);
 
         return member is null

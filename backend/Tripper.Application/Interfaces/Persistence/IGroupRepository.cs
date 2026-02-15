@@ -17,4 +17,5 @@ public interface IGroupRepository
     Task<GroupDetailResponse?> GetGroupDetailsAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<bool> MemberExistsAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<GroupMember?> GetMemberAsync(Guid groupId, Guid memberUserId, CancellationToken ct);
+    Task<GroupMember?> GetMembershipIncludingInactiveAsync(Guid groupId, Guid userId, CancellationToken ct);
 }
